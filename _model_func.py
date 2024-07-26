@@ -62,7 +62,7 @@ def node_preproc(batch_size, n_node, node_dim, hidden_dim):
     x4 = Dense(hidden_dim)(x3)
     x5 = Reshape((batch_size, n_node, hidden_dim))(x4)
     out_shape = x5.shape
-    print(out_shape, mask_inp.shape)
+    # print(out_shape, mask_inp.shape)
     masked_out = multiply([x5, mask_inp])
     # masked_out = Lambda(apply_mask, output_shape = out_shape)([x5, mask_inp])
     re_out = Reshape((batch_size, n_node, hidden_dim))(masked_out)
@@ -119,10 +119,15 @@ class GRUUpdateLayer(Layer):
     def __init__(self, batch_size, n_node, hidden_dim, **kwargs):
         super(GRUUpdateLayer, self).__init__(**kwargs)
         self.batch_size = batch_size
-        self.n_node = n_node
+        self.n = n_node
+        self.d = hidden_dim
+        # Comment this out when hidden_dim code has been replaced
         self.hidden_dim = hidden_dim
-        self.gru = GRU(hidden_dim, return_sequences=True, return_state=True)
-        
+        self.n_node = n_node
+
+        self.gru = GRU(self.d * self.n, return_sequences=True, return_state=True)
+    
+    # Rewrite call keeping in mind d instead of hidden_dim    
     def call(self, inputs):
         msg, node = inputs
         msg = tf.reshape(msg, [self.batch_size*self.n_node, 1, self.hidden_dim])
@@ -133,23 +138,28 @@ class GRUUpdateLayer(Layer):
     
     def trial(self):
         batch_s = 4
-        out_dim = 3
+        dim = 3
         seq = 2
-        inputs = [np.random.random((batch_s, out_dim)) for _ in range(seq)]
-        initial = np.ones((batch_s, out_dim))
-        state = initial
-        print(initial)
+
+        # According to this link, input should be of shape: [batch_size, seq_len, input_dim]
+        # https://discuss.pytorch.org/t/gru-for-multi-dimensional-input/156682
+        inputs = np.random.random((batch_s, seq, dim))
+        initial = np.ones((batch_s, dim))
+
         inp_shape = np.shape(inputs)
-        print(np.shape(inputs))
-        gru = GRU(4, return_state=True)
-        for i in range(len(inputs)):
-            temp_inp = [inputs[i]]
-            print(np.shape(temp_inp))
-            output, state = gru(temp_inp, initial_state=state)
-            outputs.append(output)
-        # output, state = gru(inputs, initial_state=initial)
+        print("Input Shape: ", np.shape(inputs))
+        print("Initial Shape: ", np.shape(initial))
+        print("Input Shape Modified: ", np.shape(inputs[0]))
+        gru = GRU(dim, return_sequences=True, return_state = True)
+        output = gru(inputs)
+        # for i in range(len(inputs)):
+        #     temp_inp = [inputs[i]]
+        #     print(np.shape(temp_inp))
+        #     output, state = gru(temp_inp, initial_state=state)
+        #     outputs.append(output)
+        # # output, state = gru(inputs, initial_state=initial)
         print(output)
-        print(state)
+        print(output[0].shape, output[1].shape)
         return
 
 def test(n_step, batch_size, n_node, hidden_dim):
