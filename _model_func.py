@@ -180,6 +180,74 @@ class GRUUpdateLayer(Layer):
         return
 
 
+class upFunc_GRU(Layer):
+    def __init__(self, batch_size, n_node, hidden_dim, **kwargs):
+        super(upFunc_GRU, self).__init__(**kwargs)
+        self.batch_size = batch_size
+        self.n = n_node
+        self.d = hidden_dim
+        # Comment this out when hidden_dim code has been replaced
+        self.hidden_dim = hidden_dim
+        self.n_node = n_node
+
+        self.gru = GRU(self.d * self.n, return_sequences=True, return_state=True)
+    
+    # Rewrite call keeping in mind d instead of hidden_dim    
+    def call(self, inputs):
+        msg, node = inputs
+        msg = tf.reshape(msg, [self.batch_size, 1, self.d*self.n])
+        node = tf.reshape(node, [self.batch_size, self.d*self.n])
+        print("msg: ", msg.shape)
+        print("node: ", node.shape)
+        node_next, state = self.gru(msg, initial_state = node)
+        # node_next = tf.reshape(node_next, [self.batch_size, self.n_node, self.hidden_dim])
+        return node_next, state
+    
+class msgFunc_NNforEN(Layer):
+    def __init__(self, edge_dim):
+        super(msgFunc_NNforEN, self).__init__(**kwargs)
+        self.edge_dim = edge_dim
+        self.d = 10
+
+    def call(self, adjMat):
+        x = Input(shape=(edge_dim))
+        x1 = Dense(self.d*self.d, activation = 'relu')(x)
+        out = Reshape((self.d, self.d))(x1)
+        return tf.keras.Model(inputs=edge_feat_inp, outputs=out, name='Edge Preprocessing')
+
+# Implementation of Matrix Multiplication using Edge Networks in page 5
+class msgFunc_EN(Layer):
+    def __init__(self, batch_size, n_node, hidden_dim, **kwargs):
+        super(msgFunc_EN, self).__init__(**kwargs)
+        self.d = 10
+        self.n_node = n_node
+        self.edge_dim = edge_dim
+
+    def preprocess(self, adj_mat):
+        # inp = Input(shape=(n_node, n_node, edge_dim), batch_size = batch_size, name = '')
+        m_in = msgFunc_NNforEN(self.edge_dim)
+        m_out = msgFunc_NNforEN(self.edge_dim)
+        a_in_mat = np.zeros((self.n_node, self.n_node, self.d, self.d))
+        a_out_mat = np.zeros((self.n_node, self.n_node, self.d, self.d))
+        for v in range(self.n_node):
+            for w in range(self.n_node):
+                a_in = m_in(adj_mat[v][w])
+                a_in = tf.reshape(a_in, [self.d, self.d])
+                
+                a_out = m_out(adj_mat[v][w])
+                a_out = tf.reshape(a_out, [self.d, self.d])
+                
+                a_in_mat[v][w] = a_in
+                a_out_mat[v][w] = a_out
+
+    def call(self, h, A):
+        # A: d x d, h: d x n
+        msg = tf.matmul(A, h)
+        return msg
+
+
+
+
 def test(n_step, batch_size, n_node, hidden_dim):
     pass
 
