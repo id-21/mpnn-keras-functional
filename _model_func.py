@@ -1,3 +1,7 @@
+# PENDING TASKS
+# 1. Figure out how to apply masks using Keras Layers Embedding OR fix Keras.Multiply used to apply mask
+# https://www.tensorflow.org/guide/keras/understanding_masking_and_padding
+
 # Must set these before importing tensorflow
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
@@ -6,9 +10,12 @@ import tensorflow as tf
 tf.autograph.set_verbosity(0)
 
 import numpy as np
-from tensorflow.keras.layers import Dense, Dropout, Input, GRU, Reshape, Lambda, Layer
+from tensorflow.keras.layers import Dense, Dropout, Input, GRU, Reshape, Lambda, Layer, multiply
 from tensorflow.keras.models import Sequential
 
+# Dummy featurizer written to test Keras Functional API
+# Used this backbone in node_preproc
+# Not necessary for the code, not used in any other part
 def node_featurizer(node_dim, hidden_dim, name):
     # model = Sequential([
     #     Input(shape=(node_dim,)),
@@ -24,6 +31,7 @@ def node_featurizer(node_dim, hidden_dim, name):
     out = Dense(hidden_dim, activation = 'tanh')(x)
     return tf.keras.Model(inp, out, name=name)
 
+#
 def edge_featurizer(edge_dim, hidden_dim, name):
     # model = Sequential([
     #     Input(shape=[edge_dim,]),                # input layer
@@ -43,8 +51,10 @@ def node_preproc(batch_size, n_node, node_dim, hidden_dim):
     def apply_mask(x):
         node_feat, mask = x
         return node_feat*mask
+
     node_feat_inp = Input(shape=[batch_size, n_node, node_dim], name='node_feat')
-    mask_inp = Input(shape=[batch_size, n_node, 1], name='mask')
+    # If using layers.Multiply, mask_inp and node_feat_inp must be of same dimension
+    mask_inp = Input(shape=[batch_size, n_node, hidden_dim], name='mask')
     re_inp = Reshape((batch_size*n_node, node_dim))(node_feat_inp)
     x1 = Dense(hidden_dim*5, activation = 'relu')(re_inp)
     x2 = Dense(hidden_dim*5, activation = 'relu')(x1)
@@ -52,7 +62,9 @@ def node_preproc(batch_size, n_node, node_dim, hidden_dim):
     x4 = Dense(hidden_dim)(x3)
     x5 = Reshape((batch_size, n_node, hidden_dim))(x4)
     out_shape = x5.shape
-    masked_out = Lambda(apply_mask, output_shape = out_shape)([x5, mask_inp])
+    print(out_shape, mask_inp.shape)
+    masked_out = multiply([x5, mask_inp])
+    # masked_out = Lambda(apply_mask, output_shape = out_shape)([x5, mask_inp])
     re_out = Reshape((batch_size, n_node, hidden_dim))(masked_out)
     return tf.keras.Model(inputs=[node_feat_inp, mask_inp], outputs=re_out, name='Node Preprocessing')
 
@@ -127,6 +139,7 @@ class GRUUpdateLayer(Layer):
         initial = np.ones((batch_s, out_dim))
         state = initial
         print(initial)
+        inp_shape = np.shape(inputs)
         print(np.shape(inputs))
         gru = GRU(4, return_state=True)
         for i in range(len(inputs)):
