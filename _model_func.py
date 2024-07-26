@@ -130,10 +130,12 @@ class GRUUpdateLayer(Layer):
     # Rewrite call keeping in mind d instead of hidden_dim    
     def call(self, inputs):
         msg, node = inputs
-        msg = tf.reshape(msg, [self.batch_size*self.n_node, 1, self.hidden_dim])
-        node = tf.reshape(node, [self.batch_size * self.n_node, self.hidden_dim])
-        node_next, state = self.gru(inputs = msg, initial_state = node)
-        node_next = tf.reshape(node_next, [self.batch_size, self.n_node, self.hidden_dim])
+        msg = tf.reshape(msg, [self.batch_size, 1, self.d*self.n])
+        node = tf.reshape(node, [self.batch_size, self.d*self.n])
+        print("msg: ", msg.shape)
+        print("node: ", node.shape)
+        node_next, state = self.gru(msg, initial_state = node)
+        # node_next = tf.reshape(node_next, [self.batch_size, self.n_node, self.hidden_dim])
         return node_next, state
     
     def trial(self):

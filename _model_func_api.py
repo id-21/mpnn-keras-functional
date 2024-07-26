@@ -1,4 +1,5 @@
 from _model_func import node_featurizer, edge_featurizer, node_preproc, edge_preproc, create_mpnn_model, GRUUpdateLayer
+import numpy as np
 
 # import tensorflow
 # import keras
@@ -27,10 +28,10 @@ model = node_preproc(batch_size, n_node, node_dim, hidden_dim)
 # model2.summary()
 
 trial = GRUUpdateLayer(batch_size, n_node, hidden_dim)
-trial.trial2()
-
-# model3 = create_mpnn_model(n_step, batch_size, n_node, hidden_dim)
-# model3.summary()
+msg = np.random.random((batch_size, 1, hidden_dim*n_node))
+node =  np.random.random((batch_size, hidden_dim*n_node))
+seq, fin_state = trial.call([msg, node])
+print(fin_state.shape, seq.shape)
 
 # plot_model(model,to_file='demo.png',show_shapes=True)
 
