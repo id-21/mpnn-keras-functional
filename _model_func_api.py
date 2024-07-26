@@ -1,4 +1,4 @@
-from model_functions import node_featurizer, edge_featurizer, node_preproc, edge_preproc, create_mpnn_model, GRUUpdateLayer
+from _model_func import node_featurizer, edge_featurizer, node_preproc, edge_preproc, create_mpnn_model, GRUUpdateLayer
 
 # import tensorflow
 # import keras
@@ -20,8 +20,8 @@ print("Successfully imported!")
 # model_3 = tf.keras.Model(model_1.input, out, name='trial1+2')
 # model_3.summary()
 
-# model = node_preproc(batch_size, n_node, node_dim, hidden_dim)
-# model.summary()
+model = node_preproc(batch_size, n_node, node_dim, hidden_dim)
+model.summary()
 
 # model2 = edge_preproc(batch_size, n_node, node_dim, hidden_dim)
 # model2.summary()
