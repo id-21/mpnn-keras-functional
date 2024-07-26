@@ -21,13 +21,13 @@ print("Successfully imported!")
 # model_3.summary()
 
 model = node_preproc(batch_size, n_node, node_dim, hidden_dim)
-model.summary()
+# model.summary()
 
 # model2 = edge_preproc(batch_size, n_node, node_dim, hidden_dim)
 # model2.summary()
 
 trial = GRUUpdateLayer(batch_size, n_node, hidden_dim)
-trial.trial()
+trial.trial2()
 
 # model3 = create_mpnn_model(n_step, batch_size, n_node, hidden_dim)
 # model3.summary()

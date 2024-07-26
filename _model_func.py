@@ -139,7 +139,7 @@ class GRUUpdateLayer(Layer):
     def trial(self):
         batch_s = 4
         dim = 3
-        seq = 2
+        seq = 1
 
         # According to this link, input should be of shape: [batch_size, seq_len, input_dim]
         # https://discuss.pytorch.org/t/gru-for-multi-dimensional-input/156682
@@ -149,18 +149,34 @@ class GRUUpdateLayer(Layer):
         inp_shape = np.shape(inputs)
         print("Input Shape: ", np.shape(inputs))
         print("Initial Shape: ", np.shape(initial))
-        print("Input Shape Modified: ", np.shape(inputs[0]))
+        # print("Input Shape Modified: ", np.shape(inputs[0]))
         gru = GRU(dim, return_sequences=True, return_state = True)
-        output = gru(inputs)
-        # for i in range(len(inputs)):
-        #     temp_inp = [inputs[i]]
-        #     print(np.shape(temp_inp))
-        #     output, state = gru(temp_inp, initial_state=state)
-        #     outputs.append(output)
-        # # output, state = gru(inputs, initial_state=initial)
-        print(output)
-        print(output[0].shape, output[1].shape)
+        seq, state = gru(inputs, initial_state = initial)
+        print(initial)
+        print(seq)
+        print(state)
         return
+
+    def trial2(self):
+        batch_s = 4
+        dim = 3
+        seq = 5
+
+        inputs = np.random.random((batch_s, seq, dim))
+        initial = np.ones((batch_s, dim))
+        print(inputs.shape)
+
+        gru = GRU(dim, return_sequences=True, return_state=True)
+        state = initial
+        for i in range(seq):
+            inp = inputs[:, i:i+1, :]
+            # print(inp.shape)
+            seq, n_state = gru(inp, initial_state = state)
+            print(seq.shape, n_state.shape)
+            state = n_state
+
+        return
+
 
 def test(n_step, batch_size, n_node, hidden_dim):
     pass
