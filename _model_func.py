@@ -72,14 +72,14 @@ class msgFunc_NNforEN(Layer):
         super(msgFunc_NNforEN, self).__init__(**kwargs)
         self.edge_dim = edge_dim
         self.d = 12
-        x = Input(shape=(self.edge_dim, ))
+        x = Input(shape=(self.edge_dim,))
         x1 = Dense(self.d*self.d, activation = 'relu')(x)
         out = Reshape((self.d, self.d))(x1)
         self.model = tf.keras.Model(inputs=x, outputs=out, name='Edge Preprocessing')
 
     def __call__(self, adjMat):
         # Likely need to check its dimension
-        pass
+        return self.model(adjMat)
 
         
 # Implementation of Matrix Multiplication using Edge Networks in page 5
@@ -104,9 +104,9 @@ class msgFunc_EN(Layer):
             a_out_mat = np.zeros((self.n_node, self.n_node, self.d, self.d))
             for v in range(self.n_node):
                 for w in range(self.n_node):
-                    a_in = self.m_in(adj_mat[i][v][w])
+                    a_in = self.m_in(adj_mat[i][v][w].reshape(1, -1))
                     # a_in = tf.reshape(a_in, [self.d, self.d])
-                    a_out = self.m_out(adj_mat[i][v][w])
+                    a_out = self.m_out(adj_mat[i][v][w].reshape(1, -1))
                     # a_out = tf.reshape(a_out, [self.d, self.d])
 
                     a_in_mat[v][w] = a_in
