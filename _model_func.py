@@ -13,90 +13,17 @@ import numpy as np
 from tensorflow.keras.layers import Dense, Dropout, Input, GRU, Reshape, Lambda, Layer, multiply
 from tensorflow.keras.models import Sequential
 
-# Dummy featurizer written to test Keras Functional API
-# Used this backbone in node_preproc
-# Not necessary for the code, not used in any other part
-def node_featurizer(node_dim, hidden_dim, name):
-    # model = Sequential([
-    #     Input(shape=(node_dim,)),
-    #     Dense(hidden_dim*5, activation = 'relu'),
-    #     Dense(hidden_dim*5, activation = 'relu'),
-    #     Dense(hidden_dim*5, activation = 'relu'),
-    #     Dense(hidden_dim, activation = 'tanh'),
-    # ])
-    inp = Input(shape=[node_dim, ])
-    x = Dense(hidden_dim*5, activation = 'relu')(inp)
-    x = Dense(hidden_dim*5, activation = 'relu')(x)
-    x = Dense(hidden_dim*5, activation = 'relu')(x)
-    out = Dense(hidden_dim, activation = 'tanh')(x)
-    return tf.keras.Model(inp, out, name=name)
 
-#
-def edge_featurizer(edge_dim, hidden_dim, name):
-    # model = Sequential([
-    #     Input(shape=[edge_dim,]),                # input layer
-    #     Dense(hidden_dim*5, activation='relu'),
-    #     Dense(hidden_dim*5, activation='relu'),
-    #     Dense(hidden_dim*5, activation='relu'),
-    #     Dense(hidden_dim*hidden_dim)             # output layer
-    # ])
-    inp = Input(shape=[edge_dim, ])
-    x = Dense(hidden_dim*5, activation = 'relu')(inp)
-    x = Dense(hidden_dim*5, activation = 'relu')(x)
-    x = Dense(hidden_dim*5, activation = 'relu')(x)
-    out = Dense(hidden_dim*hidden_dim)(x)
-    return tf.keras.Model(inp, out, name=name)
+def remove_self_loops(edge_feat):
+    return edge_feat * tf.reshape(1-tf.eye(n_node), [1, n_node, n_node, 1, 1])
+def remove_invalid_edges(x):
+    edge_feat, mask = x
+    edge_feat = edge_feat * tf.reshape(mask, [batch_size, n_node, 1, 1, 1]) * tf.reshape(mask, [batch_size, 1, n_node, 1, 1])
+    return edge_feat  
 
-def node_preproc(batch_size, n_node, node_dim, hidden_dim):
-    def apply_mask(x):
-        node_feat, mask = x
-        return node_feat*mask
-
-    node_feat_inp = Input(shape=[batch_size, n_node, node_dim], name='node_feat')
-    # If using layers.Multiply, mask_inp and node_feat_inp must be of same dimension
-    mask_inp = Input(shape=[batch_size, n_node, hidden_dim], name='mask')
-    re_inp = Reshape((batch_size*n_node, node_dim))(node_feat_inp)
-    x1 = Dense(hidden_dim*5, activation = 'relu')(re_inp)
-    x2 = Dense(hidden_dim*5, activation = 'relu')(x1)
-    x3 = Dense(hidden_dim*5, activation = 'relu')(x2)
-    x4 = Dense(hidden_dim)(x3)
-    x5 = Reshape((batch_size, n_node, hidden_dim))(x4)
-    out_shape = x5.shape
-    # print(out_shape, mask_inp.shape)
-    masked_out = multiply([x5, mask_inp])
-    # masked_out = Lambda(apply_mask, output_shape = out_shape)([x5, mask_inp])
-    re_out = Reshape((batch_size, n_node, hidden_dim))(masked_out)
-    return tf.keras.Model(inputs=[node_feat_inp, mask_inp], outputs=re_out, name='Node Preprocessing')
-
-def edge_preproc(batch_size, n_node, edge_dim, hidden_dim):
-    def remove_self_loops(edge_feat):
-        return edge_feat * tf.reshape(1-tf.eye(n_node), [1, n_node, n_node, 1, 1])
-    def remove_invalid_edges(x):
-        edge_feat, mask = x
-        edge_feat = edge_feat * tf.reshape(mask, [batch_size, n_node, 1, 1, 1]) * tf.reshape(mask, [batch_size, 1, n_node, 1, 1])
-        return edge_feat    
-    edge_feat_inp = Input(shape=[batch_size, n_node, n_node, edge_dim])
-    mask_inp = Input(shape=[batch_size, n_node, 1], name='mask')
-    re_inp = Reshape((batch_size*n_node*n_node, edge_dim))(edge_feat_inp)
-    x1 = Dense(hidden_dim*5, activation = 'relu')(re_inp)
-    x2 = Dense(hidden_dim*5, activation = 'relu')(x1)
-    x3 = Dense(hidden_dim*5, activation = 'relu')(x2)
-    x4 = Dense(hidden_dim*hidden_dim)(x3)
-    x5 = Reshape((batch_size, n_node, n_node, hidden_dim, hidden_dim))(x4)
-    x6 = Lambda(remove_self_loops, output_shape = x5.shape)(x5)
-    x7 = Lambda(remove_invalid_edges, output_shape = x5.shape)([x6, mask_inp])
-    return tf.keras.Model(inputs=[edge_feat_inp, mask_inp], outputs=x7, name='Edge Preprocessing')
-
-# def _edge_nn(inp, mask, batch_size, n_node, edge_dim, hidden_dim):
-#     inp = tf.reshape(inp, [batch_size * n_node * n_node, edge_dim])
-#     edge_model = edge_featurizer(edge_dim, hidden_dim, 'edge_pp_nn')
-#     out = edge_model(inp)
-#     out = tf.reshape(out, [batch_size, n_node, n_node, hidden_dim, hidden_dim])
-#     # Remove self Loops
-#     out = out * tf.reshape(1-tf.eye(n_node), [1, n_node, n_node, 1, 1])
-#     # Remove invalid edges using mask
-#     out = out * tf.reshape(mask, [batch_size, n_node, 1, 1, 1]) * tf.reshape(mask, [batch_size, 1, n_node, 1, 1])
-#     return out
+# x6 = Lambda(remove_self_loops, output_shape = x5.shape)(x5)
+# x7 = Lambda(remove_invalid_edges, output_shape = x5.shape)([x6, mask_inp])
+   
 
 class _msg_nn(Layer):
     def __init__(self, batch_size, n_node, hidden_dim, **kwargs):
@@ -115,71 +42,8 @@ class _msg_nn(Layer):
         msg = tf.reduce_mean(msg, 3)
         return msg
 
-class GRUUpdateLayer(Layer):
-    def __init__(self, batch_size, n_node, hidden_dim, **kwargs):
-        super(GRUUpdateLayer, self).__init__(**kwargs)
-        self.batch_size = batch_size
-        self.n = n_node
-        self.d = hidden_dim
-        # Comment this out when hidden_dim code has been replaced
-        self.hidden_dim = hidden_dim
-        self.n_node = n_node
-
-        self.gru = GRU(self.d * self.n, return_sequences=True, return_state=True)
-    
-    # Rewrite call keeping in mind d instead of hidden_dim    
-    def call(self, inputs):
-        msg, node = inputs
-        msg = tf.reshape(msg, [self.batch_size, 1, self.d*self.n])
-        node = tf.reshape(node, [self.batch_size, self.d*self.n])
-        print("msg: ", msg.shape)
-        print("node: ", node.shape)
-        node_next, state = self.gru(msg, initial_state = node)
-        # node_next = tf.reshape(node_next, [self.batch_size, self.n_node, self.hidden_dim])
-        return node_next, state
-    
-    def trial(self):
-        batch_s = 4
-        dim = 3
-        seq = 1
-
-        # According to this link, input should be of shape: [batch_size, seq_len, input_dim]
-        # https://discuss.pytorch.org/t/gru-for-multi-dimensional-input/156682
-        inputs = np.random.random((batch_s, seq, dim))
-        initial = np.ones((batch_s, dim))
-
-        inp_shape = np.shape(inputs)
-        print("Input Shape: ", np.shape(inputs))
-        print("Initial Shape: ", np.shape(initial))
-        # print("Input Shape Modified: ", np.shape(inputs[0]))
-        gru = GRU(dim, return_sequences=True, return_state = True)
-        seq, state = gru(inputs, initial_state = initial)
-        print(initial)
-        print(seq)
-        print(state)
-        return
-
-    def trial2(self):
-        batch_s = 4
-        dim = 3
-        seq = 5
-
-        inputs = np.random.random((batch_s, seq, dim))
-        initial = np.ones((batch_s, dim))
-        print(inputs.shape)
-
-        gru = GRU(dim, return_sequences=True, return_state=True)
-        state = initial
-        for i in range(seq):
-            inp = inputs[:, i:i+1, :]
-            # print(inp.shape)
-            seq, n_state = gru(inp, initial_state = state)
-            print(seq.shape, n_state.shape)
-            state = n_state
-
-        return
-
-
+# According to this link, input should be of shape: [batch_size, seq_len, input_dim]
+# https://discuss.pytorch.org/t/gru-for-multi-dimensional-input/156682
 class upFunc_GRU(Layer):
     def __init__(self, batch_size, n_node, hidden_dim, **kwargs):
         super(upFunc_GRU, self).__init__(**kwargs)
@@ -193,7 +57,7 @@ class upFunc_GRU(Layer):
         self.gru = GRU(self.d * self.n, return_sequences=True, return_state=True)
     
     # Rewrite call keeping in mind d instead of hidden_dim    
-    def call(self, inputs):
+    def __call__(self, inputs):
         msg, node = inputs
         msg = tf.reshape(msg, [self.batch_size, 1, self.d*self.n])
         node = tf.reshape(node, [self.batch_size, self.d*self.n])
@@ -204,49 +68,59 @@ class upFunc_GRU(Layer):
         return node_next, state
     
 class msgFunc_NNforEN(Layer):
-    def __init__(self, edge_dim):
+    def __init__(self, edge_dim, **kwargs):
         super(msgFunc_NNforEN, self).__init__(**kwargs)
         self.edge_dim = edge_dim
-        self.d = 10
-
-    def call(self, adjMat):
-        x = Input(shape=(edge_dim))
+        self.d = 12
+        x = Input(shape=(self.edge_dim, ))
         x1 = Dense(self.d*self.d, activation = 'relu')(x)
         out = Reshape((self.d, self.d))(x1)
-        return tf.keras.Model(inputs=edge_feat_inp, outputs=out, name='Edge Preprocessing')
+        self.model = tf.keras.Model(inputs=x, outputs=out, name='Edge Preprocessing')
 
+    def __call__(self, adjMat):
+        # Likely need to check its dimension
+        pass
+
+        
 # Implementation of Matrix Multiplication using Edge Networks in page 5
 class msgFunc_EN(Layer):
-    def __init__(self, batch_size, n_node, hidden_dim, **kwargs):
+    def __init__(self, batch_size, n_node, edge_dim, d, **kwargs):
         super(msgFunc_EN, self).__init__(**kwargs)
-        self.d = 10
+        self.d = d
         self.n_node = n_node
         self.edge_dim = edge_dim
+        self.batch_size = batch_size
+        self.m_in = msgFunc_NNforEN(self.edge_dim)
+        self.m_out = msgFunc_NNforEN(self.edge_dim)
 
-    def preprocess(self, adj_mat):
-        # inp = Input(shape=(n_node, n_node, edge_dim), batch_size = batch_size, name = '')
-        m_in = msgFunc_NNforEN(self.edge_dim)
-        m_out = msgFunc_NNforEN(self.edge_dim)
-        a_in_mat = np.zeros((self.n_node, self.n_node, self.d, self.d))
-        a_out_mat = np.zeros((self.n_node, self.n_node, self.d, self.d))
-        for v in range(self.n_node):
-            for w in range(self.n_node):
-                a_in = m_in(adj_mat[v][w])
-                a_in = tf.reshape(a_in, [self.d, self.d])
-                
-                a_out = m_out(adj_mat[v][w])
-                a_out = tf.reshape(a_out, [self.d, self.d])
-                
-                a_in_mat[v][w] = a_in
-                a_out_mat[v][w] = a_out
+    # Accepts the adjacency matrix of the whole batch and iterates over the molecules
+    def process(self, adj_mat):
+        edge_val_in = np.zeros((self.batch_size, self.n_node, self.n_node, self.d, self.d))
+        edge_val_out = np.zeros((self.batch_size, self.n_node, self.n_node, self.d, self.d))
+        
+        # Loop to iterate over the molecules
+        for i in range(len(adj_mat)):
+            a_in_mat = np.zeros((self.n_node, self.n_node, self.d, self.d))
+            a_out_mat = np.zeros((self.n_node, self.n_node, self.d, self.d))
+            for v in range(self.n_node):
+                for w in range(self.n_node):
+                    a_in = self.m_in(adj_mat[i][v][w])
+                    # a_in = tf.reshape(a_in, [self.d, self.d])
+                    a_out = self.m_out(adj_mat[i][v][w])
+                    # a_out = tf.reshape(a_out, [self.d, self.d])
 
-    def call(self, h, A):
+                    a_in_mat[v][w] = a_in
+                    a_out_mat[v][w] = a_out
+            
+            edge_val_in[i] = a_in_mat
+            edge_val_out[i] = a_out_mat
+        return edge_val_in, edge_val_out
+
+
+    def __call__(self, h, A):
         # A: d x d, h: d x n
         msg = tf.matmul(A, h)
         return msg
-
-
-
 
 def test(n_step, batch_size, n_node, hidden_dim):
     pass
