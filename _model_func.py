@@ -71,7 +71,7 @@ class msgFunc_NNforEN(Layer):
     def __init__(self, edge_dim, **kwargs):
         super(msgFunc_NNforEN, self).__init__(**kwargs)
         self.edge_dim = edge_dim
-        self.d = 12
+        self.d = 13
         x = Input(shape=(self.edge_dim,))
         x1 = Dense(self.d*self.d, activation = 'relu')(x)
         out = Reshape((self.d, self.d))(x1)
