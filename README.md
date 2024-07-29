@@ -1,1 +1,1 @@
-"# mpnn-keras-functional" 
+This is a TensorFlow 2.x implementation of the Message Passing Neural Networks (MPNN) proposed by Gilmer et al. in their paper ["Neural Message Passing for Quantum Chemistry" (2017)]([url](https://www.bing.com/ck/a?!&&p=f5dd3329d16a6338JmltdHM9MTcyMjIxMTIwMCZpZ3VpZD0wZDQ1NGI1Yi05NzczLTY5NmQtMzYxNS01ZjBmOTZlODY4MDUmaW5zaWQ9NTIwNA&ptn=3&ver=2&hsh=3&fclid=0d454b5b-9773-696d-3615-5f0f96e86805&psq=arXiv%3a1704.01212v2&u=a1aHR0cHM6Ly9hcnhpdi5vcmcvYWJzLzE3MDQuMDEyMTI&ntb=1))
