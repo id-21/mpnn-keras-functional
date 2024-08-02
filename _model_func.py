@@ -136,6 +136,9 @@ class msgFunc_EN(Layer):
         h_ = tf.reshape(h, [self.batch_size * self.n_node, self.d, 1])
         msg = tf.matmul(A, h_)
         msg = tf.reshape(msg, [self.batch_size, self.n_node, self.n_node, self.d])
+        # To reduce the dimension of this matrix, we do a reshuffle and then a reduce_mean operation
+        msg = tf.transpose(msg, perm = [0, 2, 3, 1])
+        msg = tf.reduce_mean(msg, 3)
         return msg
 
 def test(n_step, batch_size, n_node, hidden_dim):
