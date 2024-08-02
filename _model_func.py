@@ -71,7 +71,7 @@ class msgFunc_NNforEN(Layer):
     def __init__(self, edge_dim, **kwargs):
         super(msgFunc_NNforEN, self).__init__(**kwargs)
         self.edge_dim = edge_dim
-        self.d = 13
+        self.d = 7
         x = Input(shape=(self.edge_dim,))
         x1 = Dense(self.d*self.d, activation = 'relu')(x)
         out = Reshape((self.d, self.d))(x1)
@@ -114,12 +114,28 @@ class msgFunc_EN(Layer):
             
             edge_val_in[i] = a_in_mat
             edge_val_out[i] = a_out_mat
+        self.A_in = edge_val_in
+        self.A_out = edge_val_out
         return edge_val_in, edge_val_out
 
+    
+    '''
+    The call function of this message computing function is defined to allow batch processing of 
+    molecules. Details regarding the implementation are explained in model_arch.md
 
-    def __call__(self, h, A):
-        # A: d x d, h: d x n
-        msg = tf.matmul(A, h)
+    Call arguments:
+    h: node matrix for which messages are to be computed
+    
+    The function has been hard coded to compute the message for only the first element of the batch
+    '''
+    def __call__(self, h):
+        # A: (batch_size, n_node, n_node, d, d);
+        # h: (batch_size, d, n)
+        A = self.A_in
+        A = tf.reshape(A, [self.batch_size * self.n_node, self.n_node * self.d, self.d])
+        h_ = tf.reshape(h, [self.batch_size * self.n_node, self.d, 1])
+        msg = tf.matmul(A, h_)
+        msg = tf.reshape(msg, [self.batch_size, self.n_node, self.n_node, self.d])
         return msg
 
 def test(n_step, batch_size, n_node, hidden_dim):

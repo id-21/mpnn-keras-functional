@@ -5,13 +5,13 @@ from _model_func import upFunc_GRU, msgFunc_EN
 # from tensorflow.keras.util import plot_model
 import numpy as np
 
-batch_size = 100
-n_node = 29
-node_dim = 10
-edge_dim = 10
-hidden_dim = 50
-n_step = 8
-d = 13
+batch_size = 10
+n_node = 4
+node_dim = 5
+edge_dim = 3
+hidden_dim = 6
+n_step = 2
+d = 7
 
 print("Successfully imported!")
 
@@ -19,13 +19,16 @@ trial_msgFunc = msgFunc_EN(batch_size, n_node, edge_dim, d)
 
 trial_adjM = np.random.random((batch_size, n_node, n_node, edge_dim))
 a, b =trial_msgFunc.process(trial_adjM)
-print(trial_adjM.shape)
-print(a[0][0][0][:].shape)
+print("trial_adjM: ", trial_adjM.shape)
+print("Edge vectorised: ", a[0][0][0][:].shape)
 
 u = 3
-w = 4
-trial_h = np.random.random((d, n_node))
-# trial_msgFunc(trial_h, u, w)
+w = 2
+trial_h = np.random.random((batch_size, n_node, d))
+msg = trial_msgFunc(trial_h)
+print("msg shape: ", msg.shape)
+print(msg)
+
 
 # plot_model(model,to_file='demo.png',show_shapes=True)
 
