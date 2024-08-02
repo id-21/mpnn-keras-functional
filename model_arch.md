@@ -4,3 +4,21 @@ The MPNN model proceeds as follows:
 3. The node representations are then updated using a Gated Recurrent Unit (GRU) with the messages as the input and the initial state as the initial node representation.
 4. Message passing is performed for t steps. 
 5. The final node representations are then fed into another neural netowrk to make predictions about molecular properties.  
+
+
+Shapes of the various variables:
+node_inp: Input node feature vectors 
+	Shape -> (batch_size, n_node, node_dim)
+(h_v)^t: node feature vectors after the t-th message passing step
+(h_v)^0: node feature vectors after the 0-th message passsing step
+	Shape -> (batch_size, n_node, d)
+		where d > node_dim
+adj_mat: adjacency matrix of the molecular graph, each element is a vector with the bond distance and the bond type encoded as a OHE
+	Shape -> (batch_size, n_node, n_node, edge_dim)
+		where edge_dim = 1 + no_of_bond_types
+A_in, A_out: processed adjacency matrices where each element is a 2D matrix
+	Shape -> (batch_size, n_node, n_node, d, d)
+msg: Message computed
+	Shape -> (batch_size, n_node, n_node, d)
+	During message update, values across the 3rd dimension would need to be collated using a function to prepare the input for the GRU Layer ( Shape -> (batch_size, n_node, d) )
+
