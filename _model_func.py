@@ -25,33 +25,14 @@ def remove_invalid_edges(x):
 # x7 = Lambda(remove_invalid_edges, output_shape = x5.shape)([x6, mask_inp])
    
 
-class _msg_nn(Layer):
-    def __init__(self, batch_size, n_node, hidden_dim, **kwargs):
-        super(_msg_nn, self).__init__(**kwargs)
-        self.batch_size = batch_size
-        self.n_node = n_node
-        self.hidden_dim = hidden_dim
-    
-    def call(self, inputs):
-        edge_wgt, node_hidden = inputs
-        wgt = tf.reshape(edge_wgt, [self.batch_size*self.n_node, self.n_node*self.hidden_dim, self.hidden_dim])
-        node = tf.reshape(node_hidden, [self.batch_size*self.n_node, self.hidden_dim, 1])
-        msg = tf.matmul(wgt, node)
-        msg = tf.reshape(msg, [self.batch_size, self.n_node, self.n_node, self.hidden_dim])
-        msg = tf.transpose(msg, perm=[0, 2, 3, 1])
-        msg = tf.reduce_mean(msg, 3)
-        return msg
-
 # According to this link, input should be of shape: [batch_size, seq_len, input_dim]
 # https://discuss.pytorch.org/t/gru-for-multi-dimensional-input/156682
 class upFunc_GRU(Layer):
-    def __init__(self, batch_size, n_node, hidden_dim, **kwargs):
+    def __init__(self, batch_size, n_node, d, **kwargs):
         super(upFunc_GRU, self).__init__(**kwargs)
         self.batch_size = batch_size
         self.n = n_node
-        self.d = hidden_dim
-        # Comment this out when hidden_dim code has been replaced
-        self.hidden_dim = hidden_dim
+        self.d = d
         self.n_node = n_node
 
         self.gru = GRU(self.d * self.n, return_sequences=True, return_state=True)

@@ -1,6 +1,10 @@
 from _model_func import upFunc_GRU, msgFunc_EN
 
-# import tensorflow
+
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+os.environ['AUTOGRAPH_VERBOSITY'] = '0'
+import tensorflow as tf
 # import keras
 # from tensorflow.keras.util import plot_model
 import numpy as np
@@ -29,6 +33,14 @@ msg = trial_msgFunc(trial_h)
 print("msg shape: ", msg.shape)
 print(msg)
 
+gru = upFunc_GRU(batch_size, n_node, d)
+n_next, state = gru([msg, trial_h])
+
+print("GRU Operation done")
+print("n_next: ", n_next.shape)
+print("state: ", state.shape)
+state = tf.reshape(state, [batch_size, n_node, d])
+# print(trial_h - state)
 
 # plot_model(model,to_file='demo.png',show_shapes=True)
 
