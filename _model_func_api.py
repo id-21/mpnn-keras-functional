@@ -1,4 +1,4 @@
-from _model_func import upFunc_GRU, msgFunc_EN
+from _model_func import upFunc_GRU, msgFunc_EN, create_mpnn_model
 
 
 import os
@@ -22,23 +22,23 @@ print("Successfully imported!")
 trial_msgFunc = msgFunc_EN(batch_size, n_node, edge_dim, d)
 
 trial_adjM = np.random.random((batch_size, n_node, n_node, edge_dim))
-a, b =trial_msgFunc.process(trial_adjM)
-print("trial_adjM: ", trial_adjM.shape)
-print("Edge vectorised: ", a[0][0][0][:].shape)
+a =trial_msgFunc.process(trial_adjM)
+# print("trial_adjM: ", trial_adjM.shape)
+# print("Edge vectorised: ", a[0][0][0][:].shape)
 
 u = 3
 w = 2
 trial_h = np.random.random((batch_size, n_node, d))
-msg = trial_msgFunc(trial_h)
-print("msg shape: ", msg.shape)
-print(msg)
+msg = trial_msgFunc.call(trial_h)
+# print("msg shape: ", msg.shape)
+# print(msg)
 
 gru = upFunc_GRU(batch_size, n_node, d)
 n_next, state = gru([msg, trial_h])
 
-print("GRU Operation done")
-print("n_next: ", n_next.shape)
-print("state: ", state.shape)
+# print("GRU Operation done")
+# print("n_next: ", n_next.shape)
+# print("state: ", state.shape)
 state = tf.reshape(state, [batch_size, n_node, d])
 # print(trial_h - state)
 
@@ -48,5 +48,5 @@ state = tf.reshape(state, [batch_size, n_node, d])
 # mask can be prepared using:
 # mask = tf.clip_by_value(tf.reduce_max(inp, -1, keepdims=True), 0, 1)
 
-
+model = create_mpnn_model(n_step, batch_size, n_node, d, edge_dim)
 

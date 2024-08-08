@@ -49,16 +49,16 @@ class upFunc_GRU(Layer):
         return node_next, state
     
 class msgFunc_NNforEN(Layer):
-    def __init__(self, edge_dim, **kwargs):
+    def __init__(self, edge_dim, d, **kwargs):
         super(msgFunc_NNforEN, self).__init__(**kwargs)
         self.edge_dim = edge_dim
-        self.d = 7
+        self.d = d
         x = Input(shape=(self.edge_dim,))
         x1 = Dense(self.d*self.d, activation = 'relu')(x)
         out = Reshape((self.d, self.d))(x1)
         self.model = tf.keras.Model(inputs=x, outputs=out, name='Edge Preprocessing')
 
-    def __call__(self, adjMat):
+    def call(self, adjMat):
         # Likely need to check its dimension
         return self.model(adjMat)
 
@@ -71,34 +71,56 @@ class msgFunc_EN(Layer):
         self.n_node = n_node
         self.edge_dim = edge_dim
         self.batch_size = batch_size
-        self.m_in = msgFunc_NNforEN(self.edge_dim)
-        self.m_out = msgFunc_NNforEN(self.edge_dim)
+        self.m_in = msgFunc_NNforEN(self.edge_dim, self.d)
+        self.A_in = np.zeros((self.batch_size, self.n_node, self.n_node, self.d, self.d))
 
     # Accepts the adjacency matrix of the whole batch and iterates over the molecules
     def process(self, adj_mat):
-        edge_val_in = np.zeros((self.batch_size, self.n_node, self.n_node, self.d, self.d))
-        edge_val_out = np.zeros((self.batch_size, self.n_node, self.n_node, self.d, self.d))
-        
-        # Loop to iterate over the molecules
-        for i in range(len(adj_mat)):
-            a_in_mat = np.zeros((self.n_node, self.n_node, self.d, self.d))
-            a_out_mat = np.zeros((self.n_node, self.n_node, self.d, self.d))
-            for v in range(self.n_node):
-                for w in range(self.n_node):
-                    a_in = self.m_in(adj_mat[i][v][w].reshape(1, -1))
-                    # a_in = tf.reshape(a_in, [self.d, self.d])
-                    a_out = self.m_out(adj_mat[i][v][w].reshape(1, -1))
-                    # a_out = tf.reshape(a_out, [self.d, self.d])
+        # edge_val_in = np.zeros((self.batch_size, self.n_node, self.n_node, self.d, self.d))
+        # print("Shape: ", adj_mat.shape)
+        # # Loop to iterate over the molecules
+        # for i in range(self.batch_size):
+        #     A_batch = np.zeros((self.n_node, self.n_node, self.d, self.d))
+        #     for v in range(self.n_node):
+        #         for w in range(self.n_node):
+        #             A = self.m_in.call(adj_mat[i][v][w].reshape((1, self.edge_dim)))
+        #             print("A: ", type(A))
+        #             print("A_batch: ", type(A_batch[v][w]))
+        #             A_batch[v][w] = A
+        #     edge_val_in[i] = A_batch
+        # self.A_in = edge_val_in
+        # return edge_val_in
 
-                    a_in_mat[v][w] = a_in
-                    a_out_mat[v][w] = a_out
+        # Initialize an empty tensor to store processed features
+        edge_val_in = tf.TensorArray(tf.float32, size=self.batch_size, name='FeaturizedEdgeMatrix')
+
+        # Iterate over the batch
+        for i in tf.range(self.batch_size):
+            A_batch = tf.TensorArray(tf.float32, size=self.n_node * self.n_node, element_shape=(self.d, self.d))
             
-            edge_val_in[i] = a_in_mat
-            edge_val_out[i] = a_out_mat
-        self.A_in = edge_val_in
-        self.A_out = edge_val_out
-        return edge_val_in, edge_val_out
+            # Iterate over nodes
+            idx = 0  # Index for the flattened tensor array
+            for v in tf.range(self.n_node):
+                for w in tf.range(self.n_node):
+                    # Process each element using the neural network layer
+                    if idx == (self.n_node*self.n_node-1):    
+                        print(adj_mat[i][v][w])
+                        print()
+                    A = self.m_in(tf.reshape(adj_mat[i][v][w], (1, self.edge_dim)))
 
+                    # Store the processed feature in A_batch tensor array
+                    A_batch = A_batch.write(idx, tf.reshape(A, (self.d, self.d)))
+                    idx += 1
+            
+            # Reshape A_batch and add it to edge_val_in
+            A_batch_tensor = tf.reshape(A_batch.stack(), (self.n_node, self.n_node, self.d, self.d))
+            edge_val_in = edge_val_in.write(i, A_batch_tensor)
+
+        # Stack the TensorArray to get the final tensor
+        edge_val_in_tensor = edge_val_in.stack()
+        self.A_in = edge_val_in_tensor
+
+        return edge_val_in_tensor
     
     '''
     The call function of this message computing function is defined to allow batch processing of 
@@ -109,12 +131,18 @@ class msgFunc_EN(Layer):
     
     The function has been hard coded to compute the message for only the first element of the batch
     '''
-    def __call__(self, h):
+    def call(self, h):
         # A: (batch_size, n_node, n_node, d, d);
         # h: (batch_size, d, n)
         A = self.A_in
-        A = tf.reshape(A, [self.batch_size * self.n_node, self.n_node * self.d, self.d])
-        h_ = tf.reshape(h, [self.batch_size * self.n_node, self.d, 1])
+        # Converting the data type of A to float32
+        A = tf.reshape(A, [self.batch_size * self.n_node, self.n_node * self.d, self.d], name='FeaturizedEdgeMatrix')
+        A = tf.cast(A, dtype=tf.float32)
+
+        # Converting the data type of A to float32
+        h_ = tf.reshape(h, [self.batch_size * self.n_node, self.d, 1], name='NodeRepresentation')
+        h_ = tf.cast(h_, dtype=tf.float32)
+
         msg = tf.matmul(A, h_)
         msg = tf.reshape(msg, [self.batch_size, self.n_node, self.n_node, self.d])
         # To reduce the dimension of this matrix, we do a reshuffle and then a reduce_mean operation
@@ -125,20 +153,20 @@ class msgFunc_EN(Layer):
 def test(n_step, batch_size, n_node, hidden_dim):
     pass
 
-def create_mpnn_model(n_step, batch_size, n_node, hidden_dim):
-    edge_wt_input = Input(shape=(n_node, n_node, hidden_dim, hidden_dim), batch_size=batch_size, name='edge_wt')
-    node_hidden_input = Input(shape=(n_node, hidden_dim), batch_size=batch_size, name='node_hidden')
+def create_mpnn_model(n_step, batch_size, n_node, d, edge_dim):
+    edge_wt_input = Input(shape=(n_node, n_node, edge_dim), batch_size=batch_size, name='edge_wt')
+    node_hidden_input = Input(shape=(n_node, d), batch_size=batch_size, name='node_hidden')
     # mask_input = Input(shape=(n_node, hidden_dim), batch_size=batch_size, name='mask')
+    edge_net = msgFunc_EN(batch_size, n_node, edge_dim, d)
+    upd_GRU = upFunc_GRU(batch_size, n_node, d)
 
-    node_hidden = node_hidden_input
     nhs = []
-
-    gru = GRUUpdateLayer(batch_size, n_node, hidden_dim)
+    adjM = edge_net.process(edge_wt_input)
     for _ in range(n_step):
-        msg = _msg_nn(batch_size, n_node, hidden_dim)([edge_wt_input, node_hidden])
-        node_hidden, state = gru([msg, node_hidden])
+        msg = edge_net(node_hidden_input)
+        node_hidden, state = gru([msg, node_hidden_input])
         nhs.append(node_hidden)
-
+    print(out.shape)
     out = tf.concat(nhs, axis = 2)
     model = tf.Model(inputs=[edge_wt_input, node_hidden_input], outputs=out)
     return model
