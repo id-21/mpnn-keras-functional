@@ -25,8 +25,8 @@ def remove_invalid_edges(x):
 # x7 = Lambda(remove_invalid_edges, output_shape = x5.shape)([x6, mask_inp])
    
 
-# According to this link, input should be of shape: [batch_size, seq_len, input_dim]
-# https://discuss.pytorch.org/t/gru-for-multi-dimensional-input/156682
+# Function that returns a GRU Layer for the message update step.
+# Called in the msgFunc_EN.call().
 class upFunc_GRU(Layer):
     def __init__(self, batch_size, n_node, d, **kwargs):
         super(upFunc_GRU, self).__init__(**kwargs)
@@ -37,8 +37,7 @@ class upFunc_GRU(Layer):
 
         self.gru = GRU(self.d * self.n, return_sequences=True, return_state=True)
     
-    # Rewrite call keeping in mind d instead of hidden_dim    
-    def __call__(self, inputs):
+    def call(self, inputs):
         msg, node = inputs
         msg = tf.reshape(msg, [self.batch_size, 1, self.d*self.n])
         node = tf.reshape(node, [self.batch_size, self.d*self.n])
@@ -47,7 +46,9 @@ class upFunc_GRU(Layer):
         node_next, state = self.gru(msg, initial_state = node)
         # node_next = tf.reshape(node_next, [self.batch_size, self.n_node, self.hidden_dim])
         return node_next, state
-    
+
+# Function that returns a NN model that can preprocess the edge features. 
+# Called in msgFunc_EN.__init__() and msgFunc_EN.process() functions.   
 class msgFunc_NNforEN(Layer):
     def __init__(self, edge_dim, d, **kwargs):
         super(msgFunc_NNforEN, self).__init__(**kwargs)
@@ -56,13 +57,32 @@ class msgFunc_NNforEN(Layer):
         x = Input(shape=(self.edge_dim,))
         x1 = Dense(self.d*self.d, activation = 'relu')(x)
         out = Reshape((self.d, self.d))(x1)
-        self.model = tf.keras.Model(inputs=x, outputs=out, name='Edge Preprocessing')
+        self.model = tf.keras.Model(inputs=x, outputs=out, name='EdgePreprocessing')
 
     def call(self, adjMat):
         # Likely need to check its dimension
         return self.model(adjMat)
 
-        
+
+# Custom layer to process each edge
+class EdgeProcessingLayer(Layer):
+    def __init__(self, edge_model, batch_size, n_node, edge_dim):
+        super(EdgeProcessingLayer, self).__init__()
+        self.edge_model = edge_model
+        self.batch_size = batch_size
+        self.n_node = n_node
+        self.edge_dim = edge_dim
+
+    def call(self, inputs):
+        # Flatten the input tensor to apply the model
+        flattened_input = tf.reshape(inputs, (-1, self.edge_dim))
+        # Process each edge
+        processed = self.edge_model(flattened_input)
+        output_dim = tf.shape(processed)[-1]
+        reshaped_output = tf.reshape(processed, (self.batch_size, self.n_node, self.n_node, output_dim, output_dim))
+        return reshaped_output
+
+
 # Implementation of Matrix Multiplication using Edge Networks in page 5
 class msgFunc_EN(Layer):
     def __init__(self, batch_size, n_node, edge_dim, d, **kwargs):
@@ -76,51 +96,8 @@ class msgFunc_EN(Layer):
 
     # Accepts the adjacency matrix of the whole batch and iterates over the molecules
     def process(self, adj_mat):
-        # edge_val_in = np.zeros((self.batch_size, self.n_node, self.n_node, self.d, self.d))
-        # print("Shape: ", adj_mat.shape)
-        # # Loop to iterate over the molecules
-        # for i in range(self.batch_size):
-        #     A_batch = np.zeros((self.n_node, self.n_node, self.d, self.d))
-        #     for v in range(self.n_node):
-        #         for w in range(self.n_node):
-        #             A = self.m_in.call(adj_mat[i][v][w].reshape((1, self.edge_dim)))
-        #             print("A: ", type(A))
-        #             print("A_batch: ", type(A_batch[v][w]))
-        #             A_batch[v][w] = A
-        #     edge_val_in[i] = A_batch
-        # self.A_in = edge_val_in
-        # return edge_val_in
-
-        # Initialize an empty tensor to store processed features
-        edge_val_in = tf.TensorArray(tf.float32, size=self.batch_size, name='FeaturizedEdgeMatrix')
-
-        # Iterate over the batch
-        for i in tf.range(self.batch_size):
-            A_batch = tf.TensorArray(tf.float32, size=self.n_node * self.n_node, element_shape=(self.d, self.d))
-            
-            # Iterate over nodes
-            idx = 0  # Index for the flattened tensor array
-            for v in tf.range(self.n_node):
-                for w in tf.range(self.n_node):
-                    # Process each element using the neural network layer
-                    if idx == (self.n_node*self.n_node-1):    
-                        print(adj_mat[i][v][w])
-                        print()
-                    A = self.m_in(tf.reshape(adj_mat[i][v][w], (1, self.edge_dim)))
-
-                    # Store the processed feature in A_batch tensor array
-                    A_batch = A_batch.write(idx, tf.reshape(A, (self.d, self.d)))
-                    idx += 1
-            
-            # Reshape A_batch and add it to edge_val_in
-            A_batch_tensor = tf.reshape(A_batch.stack(), (self.n_node, self.n_node, self.d, self.d))
-            edge_val_in = edge_val_in.write(i, A_batch_tensor)
-
-        # Stack the TensorArray to get the final tensor
-        edge_val_in_tensor = edge_val_in.stack()
-        self.A_in = edge_val_in_tensor
-
-        return edge_val_in_tensor
+        processed_edges = EdgeProcessingLayer(self.m_in, self.batch_size, self.n_node, self.edge_dim)(adj_mat)
+        return processed_edges
     
     '''
     The call function of this message computing function is defined to allow batch processing of 
@@ -164,7 +141,7 @@ def create_mpnn_model(n_step, batch_size, n_node, d, edge_dim):
     adjM = edge_net.process(edge_wt_input)
     for _ in range(n_step):
         msg = edge_net(node_hidden_input)
-        node_hidden, state = gru([msg, node_hidden_input])
+        node_hidden, state = upd_GRU.call([msg, node_hidden_input])
         nhs.append(node_hidden)
     print(out.shape)
     out = tf.concat(nhs, axis = 2)

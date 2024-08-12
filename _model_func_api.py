@@ -22,8 +22,8 @@ print("Successfully imported!")
 trial_msgFunc = msgFunc_EN(batch_size, n_node, edge_dim, d)
 
 trial_adjM = np.random.random((batch_size, n_node, n_node, edge_dim))
-a =trial_msgFunc.process(trial_adjM)
-# print("trial_adjM: ", trial_adjM.shape)
+# a =trial_msgFunc.process(trial_adjM)
+print("trial_adjM: ", trial_adjM.shape)
 # print("Edge vectorised: ", a[0][0][0][:].shape)
 
 u = 3
