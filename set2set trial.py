@@ -8,7 +8,11 @@ from tensorflow.keras import backend as K
 
 from tensorflow.keras.layers import Input
 
-
+'''
+Takes as input, T and n_hidden. n_hidden is the number of units in the
+LSTM. Returns a single vector that is of size 2*n_hidden
+Reads number of input features from the input dynamically
+'''
 class set2set(Layer):
     def __init__(self, T, n_hidden, **kwargs):
         super(set2set, self).__init__(**kwargs)
@@ -119,7 +123,7 @@ BATCH_SIZE = 5
 N_FEAT = 6
 
 lay = set2set(T, N_HIDDEN)
-inputs = Input(shape = (N_FEAT, FEAT_DIM), batch_size=BATCH_SIZE)
+inputs = Input(shape = (N_FEAT, FEAT_DIM), batch_size=BATCH_SIZE, name = 'inp')
 out = lay(inputs)
 
 model = tf.keras.Model(inputs = inputs, outputs = out)
