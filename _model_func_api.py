@@ -1,5 +1,4 @@
 from _model_func import upFunc_GRU, msgFunc_EN, create_mpnn_model
-from tensorflow import keras
 
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
