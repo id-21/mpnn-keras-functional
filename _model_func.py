@@ -13,18 +13,17 @@ tf.autograph.set_verbosity(0)
 import numpy as np
 from tensorflow.keras.layers import Dense, Dropout, Input, GRU, Reshape, Lambda, Layer, multiply, TimeDistributed
 from tensorflow.keras.models import Sequential
+from einops import einsum
 
 def f(x):
-    # print("Here s", x[0][0])
     return (x[0][0], x[0][1], x[0][2], x[0][3], 1)
 
 def g(x):
-    # print("Here s", len(x))
-    # print(type(x[0]))
-    # print(x[0])
     return (x[0][0], len(x), x[0][1])
 
-matmul_layer = tf.keras.layers.Lambda(lambda x: tf.matmul(x[0], x[1]), output_shape = f, name = 'MatMulLayer')
+# matmul_layer = tf.keras.layers.Lambda(lambda x: tf.matmul(x[0], x[1]), output_shape = f, name = 'MatMulLayer')
+matmul_layer = tf.keras.layers.Lambda(lambda x: einsum(x[0], x[1], "a b c d e, a f d g -> a b c d g"), output_shape = f, name = 'MatMulLayer')
+
 concat_layer = tf.keras.layers.Lambda(lambda x: tf.stack(x, axis=1), output_shape = g, name = 'ConcatLayer')
 
 
@@ -58,7 +57,7 @@ class msgFunc_NNforEN(Layer):
         x = Input(shape=(self.edge_dim,))
         x1 = Dense(self.d*self.d, activation = 'relu')(x)
         out = Reshape((self.d, self.d))(x1)
-        self.model = tf.keras.Model(inputs=x, outputs=out, name='Edge Processing NN')
+        self.model = tf.keras.Model(inputs=x, outputs=out, name='EdgeProcessingNN')
 
     def build(self, input_shape):
         super(msgFunc_NNforEN, self).build(input_shape)
@@ -82,7 +81,6 @@ class msgFunc_EN(Layer):
     def call(self, adj_mat):
         adj_3D = Reshape((-1, self.edge_dim))(adj_mat)
         vec_adj_3D = TimeDistributed(self.m_in, name = 'EdgeNeuralNetworkTD')(adj_3D)
-        print(vec_adj_3D.shape)
         final_adj = Reshape((self.n_node, self.n_node, self.d, self.d), name = 'adjMatReshape')(vec_adj_3D)
         self.A_in = final_adj
         return final_adj
@@ -216,7 +214,7 @@ class MPNN(Layer):
         for i in range(self.n_step):
             output_shape = (self.n_node, self.n_node, self.d, 1)
             # print([h_, A_])
-            msg = matmul_layer([h_, A_])
+            msg = matmul_layer([A_, h_])
             # Calculate the average along the second dimension (axis=1)
             msg = tf.keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=1), name = f'MsgAvgLayer{i}')(msg)
             msg = Reshape((1, self.n_node*self.d), name = f'messageReshapeforGRU{i}')(msg)
@@ -231,43 +229,19 @@ class MPNN(Layer):
         out_shape = (self.batch_size, self.n_step+1, self.n_node*self.d)
         return out_shape
 
-def create_mpnn_model(N_STEP, BATCH_SIZE, N_NODE, D, EDGE_DIM):
-    
-    T = 5
-    N_HIDDEN = 8
-    PROP_D = 11
-
+def create_mpnn_model(N_STEP, BATCH_SIZE, N_NODE, D, EDGE_DIM, T, N_HIDDEN, PROP_D):
+    # Layer Definitions
+    edge_net = msgFunc_EN(BATCH_SIZE, N_NODE, EDGE_DIM, D, name='EdgeNeuralNetwork')
+    mpnn = MPNN(BATCH_SIZE, N_NODE, D, N_STEP, name='MPNN')
+    # Input Definitions
     edge_wt_input = Input(shape=(N_NODE, N_NODE, EDGE_DIM), batch_size=BATCH_SIZE, name='edge_wt')
     h_0 = Input(shape=(N_NODE, D, 1), batch_size=BATCH_SIZE, name='node_feat_0')
-    edge_net = msgFunc_EN(BATCH_SIZE, N_NODE, EDGE_DIM, D, name='EdgeNeuralNetwork')
-    upd_GRU = upFunc_GRU(BATCH_SIZE, N_NODE, D, name='msgNodeUpdateGRU')
-    mpnn = MPNN(BATCH_SIZE, N_NODE, D, N_STEP, name='MPNN')
-
+    # Model Definition: Functional API
     A_ = edge_net.call(edge_wt_input)
-    print("Done!")
     stacked_nhs = mpnn(A_, h_0)
-    
-    # h_ = Reshape((N_NODE, D, 1), name = 'Input_reshape')(h_0) # 4-D tensor
-    # nhs = []
-
-    # for i in range(N_STEP):
-    #     # msg = edge_net(node_hidden_input)
-    #     output_shape = (N_NODE, N_NODE, D, 1)
-    #     # print(A_.shape)
-    #     msg = matmul_layer([A_, h_])
-    #     # Calculate the average along the second dimension (axis=1)
-    #     msg = tf.keras.layers.Lambda(lambda x: tf.reduce_mean(x, axis=1), name = f'MsgAvgLayer{i}')(msg)
-    #     msg = Reshape((1, N_NODE*D), name = f'messageReshapeforGRU{i}')(msg)
-    #     node = Reshape((N_NODE*D, ), name = f'nodeReshapeforGRU{i}')(h_)
-    #     _, h_ = upd_GRU([msg, node])
-    #     nhs.append(h_)
-
-    # stacked_nhs = concat_layer(nhs)
-
     s2s = set2set(T, N_HIDDEN)
     out = s2s(stacked_nhs)
     pred = Dense(PROP_D)(out)
-
 
     model = tf.keras.Model(inputs=[edge_wt_input, h_0], outputs=pred)
     return model
